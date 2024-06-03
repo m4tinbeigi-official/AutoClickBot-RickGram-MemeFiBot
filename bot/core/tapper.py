@@ -223,6 +223,7 @@ class Tapper:
     async def run(self, proxy: str | None):
         access_token_created_time = 0
         turbo_time = 0
+        errors_count = 0
         active_turbo = False
 
         proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
@@ -233,6 +234,10 @@ class Tapper:
 
             while True:
                 try:
+                    if errors_count > 10:
+                        logger.info(f"{self.session_name} | Errors count: <r>{errors_count}</r> | Next session pack")
+                        return
+                        
                     if time() - access_token_created_time >= 3600:
                         tg_web_data = await self.get_tg_web_data(proxy=proxy)
                         access_token = await self.get_access_token(http_client=http_client, tg_web_data=tg_web_data)
@@ -243,6 +248,12 @@ class Tapper:
                         access_token_created_time = time()
 
                         profile_data = await self.get_profile_data(http_client=http_client)
+
+                        if not profile_data:
+                            nonce = ''
+                            balance = 0
+                            errors_count += 1
+                            continue
 
                         balance = profile_data['coinsAmount']
 
@@ -269,6 +280,7 @@ class Tapper:
                     profile_data = await self.send_taps(http_client=http_client, nonce=nonce, taps=taps)
 
                     if not profile_data:
+                        errors_count += 1
                         continue
 
                     available_energy = profile_data['currentEnergy']
@@ -372,7 +384,7 @@ class Tapper:
                 except Exception as error:
                     logger.error(f"{self.session_name} | Unknown error: {error}")
                     await asyncio.sleep(delay=3)
-
+                    errors_count += 1
                 else:
                     sleep_between_clicks = randint(a=settings.SLEEP_BETWEEN_TAP[0], b=settings.SLEEP_BETWEEN_TAP[1])
 
